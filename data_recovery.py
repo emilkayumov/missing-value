@@ -2,6 +2,60 @@ import numpy as np
 from scipy.stats.mstats import mode
 
 
+def ignore_imputer(data, data_y=None, ignore_object=True):
+    """
+    A function for making the dataset without objects (or features) with mmissing values.
+    ----------
+    :param data: dataset
+    :param data_y: target (optional)
+    :param ignore_object: if true objects with missing values will be ignored, otherwise features will be ignored
+    :return: X or X, y (if data_y will be)
+    """
+    if ignore_object:
+        mask = np.sum(data != data, axis=1) == 0
+        X = data[mask]
+        if data_y:
+            y = data_y[mask]
+    else:
+        mask = np.sum(data != data, axis=0) == 0
+        X = data[:, mask]
+        if data_y:
+            y = data_y
+
+    if data_y:
+        return X, y
+    else:
+        return X
+
+
+def special_value_imputer(data, value=-1):
+    """
+    A function for filling missing values in dataset with special value.
+    :param data: dataset
+    :param value: special value
+    :return: dataset without missing values
+    """
+    X = np.array(data)
+    mask = X != X
+    X[mask] = value
+
+    return X
+
+
+def common_value_imputer(data):
+    """
+    A function for filling missing values in dataset with common value for each feature.
+    :param data: dataset
+    :return: dataset without missing values
+    """
+    X = np.array(data)
+    for i in range(X.shape[1]):
+        mask = X[:, i] != X[:, i]
+        X[mask, i] = mode(X[np.logical_not(mask), i])[0][0]
+
+    return X
+
+
 def svd_imputer(data, rank=None, max_iter=30, tol=1e-1):
     # https://web.stanford.edu/~hastie/Papers/missing.pdf
 
