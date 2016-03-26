@@ -45,17 +45,18 @@ def special_value_imputer(data, value=-1, add_binary=False):
     return X
 
 
-def common_value_imputer(data, categorical_mask, add_binary=False):
+# FIX IT !!!
+def common_value_imputer(data, add_binary=False):
     """
     A function for filling missing values in dataset with common/mean value for each feature.
     :param data: dataset
-    :param categorical_mask: mask of columns in datasets - if true it is categorical feature
+    :param add_binary: adding additonal columns with mask missing or not
     :return: dataset without missing values
     """
     X = np.array(data)
     mask = X != X
 
-    X = _first_imputer(X, categorical_mask, mask)
+    X = _first_imputer(X, mask)
 
     if add_binary:
         X = _add_missing_binary(X, mask)
@@ -63,14 +64,15 @@ def common_value_imputer(data, categorical_mask, add_binary=False):
     return X
 
 
-def svd_imputer(data, categorical_mask, rank=None, max_iter=30, tol=1e-1, makeround=False, add_binary=False):
+def svd_imputer(data, rank=None, max_iter=30, tol=1e-1, round_nearest=True, add_binary=False):
     """
     A function for filling missing values in dataset with SVD.
     :param data: dataset
-    :param categorical_mask: mask of columns in datasets - if true it is categorical feature
     :param rank: a rank of SVD
     :param max_iter: maximum number of iteration
     :param tol: tolerance of convergence
+    :param round_nearest: rounding to the nearest value in array
+    :param add_binary: adding additonal columns with mask missing or not
     :return: dataset without missing values
     """
 
@@ -80,7 +82,7 @@ def svd_imputer(data, categorical_mask, rank=None, max_iter=30, tol=1e-1, makero
     mask = X != X
 
     # first inputing by most common/mean
-    X = _first_imputer(X, categorical_mask, mask)
+    X = _first_imputer(X, mask)
 
     # iteratively using svd for best approximation
     for i in range(max_iter):
@@ -97,7 +99,8 @@ def svd_imputer(data, categorical_mask, rank=None, max_iter=30, tol=1e-1, makero
             break
         X[mask] = new_X[mask]
 
-    X = _finish_imputer(X, categorical_mask, mask, makeround)
+    if round_nearest:
+        X = _round_nearest(X, mask)
 
     if add_binary:
         X = _add_missing_binary(X, mask)
@@ -105,13 +108,14 @@ def svd_imputer(data, categorical_mask, rank=None, max_iter=30, tol=1e-1, makero
     return X
 
 
-def knn_imputer(data, categorical_mask, n_neighbors=1, metric='l2', makeround=False, add_binary=False):
+def knn_imputer(data, n_neighbors=1, metric='l2', round_nearest=True, add_binary=False):
     """
     A function for filling missing values in dataset with kNN.
     :param data: dataset
-    :param categorical_mask: mask of columns in datasets - if true it is categorical feature
     :param n_neighbors: number of nearest neighbors for find most common/mean value
     :param metric: metric to find nearest neighbors (l2, l1 or own function)
+    :param round_nearest: rounding to the nearest value in array
+    :param add_binary: adding additonal columns with mask missing or not
     :return: dataset without missing values
     """
     X = np.array(data)
@@ -145,17 +149,13 @@ def knn_imputer(data, categorical_mask, n_neighbors=1, metric='l2', makeround=Fa
             if feat:
                 continue
 
-            if categorical_mask[j]:
-                if X_neighbors.shape[0] == 0:
-                    # if no neighbors with no missing
-                    X[i, j] = mode(X[np.logical_not(mask[:, j]), j])[0][0]
-                else:
-                    X[i, j] = mode(X_neighbors[:, j])[0][0]
+            if X_neighbors.shape[0] == 0:
+                X[i, j] = np.mean(X[np.logical_not(mask[:, j]), j])
             else:
-                if X_neighbors.shape[0] == 0:
-                    X[i, j] = np.mean(X[np.logical_not(mask[:, j]), j])
-                else:
-                    X[i, j] = np.mean(X_neighbors[:, j])
+                X[i, j] = np.mean(X_neighbors[:, j])
+
+    if round_nearest:
+        X = _round_nearest(X, mask)
 
     if add_binary:
         X = _add_missing_binary(X, mask)
@@ -164,15 +164,15 @@ def knn_imputer(data, categorical_mask, n_neighbors=1, metric='l2', makeround=Fa
 
 
 # base imputer for prediction methods
-def predict_imputer(data, categorical_mask, regressor, num_iters=3, verbosity=False, makeround=False, add_binary=False):
+def predict_imputer(data, regressor, num_iters=3, verbosity=False, round_nearest=True, add_binary=False):
     """
     A function for filling missing values in dataset with Random Forest Regressor.
     :param data: dataset
-    :param categorical_mask: mask of columns in datasets - if true it is categorical feature
     :param regressor: a class with fit, predict methods for imputing
     :param num_iters: a number of iteration for approximation
     :param verbosity: print information
-    :param makeround: filling only with values from dataset
+    :param round_nearest: rounding to the nearest value in array
+    :param add_binary: adding additonal columns with mask missing or not
     :return: dataset without missing values
     """
 
@@ -180,7 +180,7 @@ def predict_imputer(data, categorical_mask, regressor, num_iters=3, verbosity=Fa
     mask = X != X
 
     # first inputing by most common/mean
-    X = _first_imputer(X, categorical_mask, mask)
+    X = _first_imputer(X, mask)
 
     # for exclusion of features
     feature_range = np.arange(X.shape[1])
@@ -195,7 +195,8 @@ def predict_imputer(data, categorical_mask, regressor, num_iters=3, verbosity=Fa
             if verbosity:
                 print('iter=' + str(it) + ' feat=' + str(i))
 
-    X = _finish_imputer(X, categorical_mask, mask, makeround)
+    if round_nearest:
+        X = _round_nearest(X, mask)
 
     if add_binary:
         X = _add_missing_binary(X, mask)
@@ -203,54 +204,54 @@ def predict_imputer(data, categorical_mask, regressor, num_iters=3, verbosity=Fa
     return X
 
 
-def rf_imputer(data, categorical_mask, num_iters=3, verbosity=False, makeround=False, add_binary=False):
+def rf_imputer(data, num_iters=3, verbosity=False, round_nearest=True, add_binary=False):
     """
     A function for filling missing values in dataset with Random Forest Regressor.
     :param data: dataset
-    :param categorical_mask: mask of columns in datasets - if true it is categorical feature
     :param num_iters: a number of iteration for approximation
     :param verbosity: print information
-    :param makeround: filling only with values from dataset
+    :param round_nearest: rounding to the nearest value in array
+    :param add_binary: adding additonal columns with mask missing or not
     :return: dataset without missing values
     """
 
     from sklearn.ensemble import RandomForestRegressor
     regressor = RandomForestRegressor(n_estimators=10, n_jobs=-1)
 
-    return predict_imputer(data, categorical_mask, regressor, num_iters, verbosity, makeround, add_binary)
+    return predict_imputer(data, regressor, num_iters, verbosity, round_nearest, add_binary)
 
 
-def linear_imputer(data, categorical_mask, num_iters=3, verbosity=False, makeround=False, add_binary=False):
+def linear_imputer(data, num_iters=3, verbosity=False, round_nearest=True, add_binary=False):
     """
     A function for filling missing values in dataset with Linear Regression.
     :param data: dataset
-    :param categorical_mask: mask of columns in datasets - if true it is categorical feature
     :param num_iters: a number of iteration for approximation
     :param verbosity: print information
-    :param makeround: filling only with values from dataset
+    :param round_nearest: rounding to the nearest value in array
+    :param add_binary: adding additonal columns with mask missing or not
     :return: dataset without missing values
     """
 
     from sklearn.linear_model import LinearRegression
     regressor = LinearRegression(normalize=True)
 
-    return predict_imputer(data, categorical_mask, regressor, num_iters, verbosity, makeround, add_binary)
+    return predict_imputer(data, regressor, num_iters, verbosity, round_nearest, add_binary)
 
 
-def em_imputer(data, categorical_mask, num_iters=3, verbosity=False, makeround=False, add_binary=False):
+def em_imputer(data, num_iters=3, verbosity=False, round_nearest=True, add_binary=False):
     """
     A function for filling missing values in dataset with EM.
     :param data: dataset
-    :param categorical_mask: mask of columns in datasets - if true it is categorical feature
     :param num_iters: a number of iteration for approximation
     :param verbosity: print information
-    :param makeround: filling only with values from dataset
+    :param round_nearest: rounding to the nearest value in array
+    :param add_binary: adding additonal columns with mask missing or not
     :return: dataset without missing values
     """
     X = data.copy()
     mask = X != X
 
-    X = _first_imputer(X, categorical_mask, mask)
+    X = _first_imputer(X, mask)
 
     from sklearn.mixture import GMM
     gmm = GMM(covariance_type='full')
@@ -271,8 +272,8 @@ def em_imputer(data, categorical_mask, num_iters=3, verbosity=False, makeround=F
         if verbosity:
             print('iter', it + 1)
 
-
-    X = _finish_imputer(X, categorical_mask, mask, makeround)
+    if round_nearest:
+        X = _round_nearest(X, mask)
 
     if add_binary:
         X = _add_missing_binary(X, mask)
@@ -280,20 +281,20 @@ def em_imputer(data, categorical_mask, num_iters=3, verbosity=False, makeround=F
     return X
 
 
-def kmean_imputer(data, categorical_mask, num_iters=3, verbosity=False, makeround=False, add_binary=False):
+def kmean_imputer(data, num_iters=3, verbosity=False, round_nearest=True, add_binary=False):
     """
     A function for filling missing values in dataset with K-Mean.
     :param data: dataset
-    :param categorical_mask: mask of columns in datasets - if true it is categorical feature
     :param num_iters: a number of iteration for approximation
     :param verbosity: print information
-    :param makeround: filling only with values from dataset
+    :param round_nearest: rounding to the nearest value in array
+    :param add_binary: adding additonal columns with mask missing or not
     :return: dataset without missing values
     """
     X = data.copy()
     mask = X != X
 
-    X = _first_imputer(X, categorical_mask, mask)
+    X = _first_imputer(X, mask)
 
     from sklearn.cluster import KMeans
     km = KMeans(n_jobs=1)
@@ -309,8 +310,8 @@ def kmean_imputer(data, categorical_mask, num_iters=3, verbosity=False, makeroun
         if verbosity:
             print('iter', it + 1)
 
-
-    X = _finish_imputer(X, categorical_mask, mask, makeround)
+    if round_nearest:
+        X = _round_nearest(X, mask)
 
     if add_binary:
         X = _add_missing_binary(X, mask)
@@ -318,30 +319,24 @@ def kmean_imputer(data, categorical_mask, num_iters=3, verbosity=False, makeroun
     return X
 
 
-# start with simple imputing
-def _first_imputer(data, categorical_mask, mask):
+# start with simple imputing with mean and find nearest
+def _first_imputer(data, mask):
 
-    for i in range(data.shape[1]):
-        if categorical_mask[i]:
-            data[mask[:, i], i] = mode(data[np.logical_not(mask[:, i]), i])[0][0]
-        else:
-            data[mask[:, i], i] = np.mean(data[np.logical_not(mask[:, i]), i])
+    for col in range(data.shape[1]):
+        data[mask[:, col], col] = np.mean(data[~mask[:, col], col])
+
+    data = _round_nearest(data, mask)
 
     return data
 
 
-# round if categorical or find nearest in array
-def _finish_imputer(data, categorical_mask, mask, makeround):
+# find nearest in array
+def _round_nearest(data, mask):
 
-    if makeround:
-        for i in range(data.shape[1]):
-            uniques = np.unique(data[~mask[:, i], i])
-            for j in np.nonzero(mask[:, i])[0]:
-                data[j, i] = _find_nearest(uniques, data[j, i])
-    else:
-        for i in range(data.shape[1]):
-            if categorical_mask[i]:
-                data[mask[:, i], i] = np.round(data[mask[:, i], i])
+    for col in range(data.shape[1]):
+        uniques = np.unique(data[~mask[:, col], col])
+        for row in np.nonzero(mask[:, col])[0]:
+            data[row, col] = _find_nearest(uniques, data[row, col])
 
     return data
 
@@ -354,4 +349,11 @@ def _find_nearest(array, value):
 
 # add a binary column for every feature with missing or not
 def _add_missing_binary(data, mask):
-    return np.hstack((data, np.array(mask, dtype=int)))
+
+    # delete columns with no missing values
+    add_mask = mask.copy()
+    for col in range(mask.shape[1] - 1, -1, -1):
+        if add_mask[:, col].sum() == 0:
+            add_mask = np.delete(add_mask, col, axis=1)
+
+    return np.hstack((data, np.array(add_mask, dtype=int)))

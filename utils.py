@@ -24,17 +24,17 @@ def multi_algs_cv(data, y, cv):
     return rf_cv, lr_cv, nn_cv
 
 
-def dataset_exps(data, y, mask, cv):
+def dataset_exps(data, y, cv):
 
     data_ignore, y_ignore = imputers.ignore_imputer(data, y)
     data_special = imputers.special_value_imputer(data, -1)
-    data_common = imputers.common_value_imputer(data, mask)
-    data_svd = imputers.svd_imputer(data, mask, rank=data.shape[1] // 2, max_iter=3)
-    data_knn = imputers.knn_imputer(data, mask, n_neighbors=5)
-    data_rf = imputers.rf_imputer(data, mask)
-    data_lr = imputers.linear_imputer(data, mask)
-    data_em = imputers.em_imputer(data, mask)
-    data_km = imputers.kmean_imputer(data, mask)
+    data_common = imputers.common_value_imputer(data)
+    data_svd = imputers.svd_imputer(data, rank=data.shape[1] // 2, max_iter=3)
+    data_knn = imputers.knn_imputer(data, n_neighbors=5)
+    data_rf = imputers.rf_imputer(data)
+    data_lr = imputers.linear_imputer(data)
+    data_em = imputers.em_imputer(data)
+    data_km = imputers.kmean_imputer(data)
 
     result = np.zeros((len(_methods), len(_algs)))
 
