@@ -45,10 +45,9 @@ def special_value_imputer(data, value=-1, add_binary=False):
     return X
 
 
-# FIX IT !!!
 def common_value_imputer(data, add_binary=False):
     """
-    A function for filling missing values in dataset with common/mean value for each feature.
+    A function for filling missing values in dataset with the most common value for each feature.
     :param data: dataset
     :param add_binary: adding additonal columns with mask missing or not
     :return: dataset without missing values
@@ -56,7 +55,27 @@ def common_value_imputer(data, add_binary=False):
     X = np.array(data)
     mask = X != X
 
-    X = _first_imputer(X, mask)
+    for col in range(X.shape[1]):
+        X[mask[:, col], col] = mode(X[~mask[:, col], col])[0][0]
+
+    if add_binary:
+        X = _add_missing_binary(X, mask)
+
+    return X
+
+
+def mean_value_imputer(data, add_binary=False):
+    """
+    A function for filling missing values in dataset with mean value for each feature.
+    :param data: dataset
+    :param add_binary: adding additonal columns with mask missing or not
+    :return: dataset without missing values
+    """
+    X = np.array(data)
+    mask = X != X
+
+    for col in range(X.shape[1]):
+        X[mask[:, col], col] = np.mean(X[~mask[:, col], col])
 
     if add_binary:
         X = _add_missing_binary(X, mask)
@@ -144,7 +163,6 @@ def knn_imputer(data, n_neighbors=1, metric='l2', round_nearest=True, add_binary
 
         X_neighbors = X_full[neighbors]
 
-        # replacing missing values by most common
         for j, feat in enumerate(mask_obj):
             if feat:
                 continue
