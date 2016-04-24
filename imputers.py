@@ -83,7 +83,7 @@ def mean_value_imputer(data, add_binary=False):
     return X
 
 
-def svd_imputer(data, rank=None, max_iter=30, tol=1e-1, round_nearest=True, add_binary=False):
+def svd_imputer(data, rank=None, max_iter=10, tol=1e-1, round_nearest=True, add_binary=False):
     """
     A function for filling missing values in dataset with SVD.
     :param data: dataset
@@ -335,6 +335,141 @@ def kmean_imputer(data, num_iters=3, verbosity=False, round_nearest=True, add_bi
         X = _add_missing_binary(X, mask)
 
     return X
+
+
+def zet_imputer(data, competent_row_num, competent_col_num, round_nearest=True, add_binary=False):
+    """
+    A function for filling missing values in dataset with Zet algorithm.
+    :param data: dataset (should be scaled)
+    :param competent_row_num: number of competent rows
+    :param competent_col_num: number of competent columns
+    :param round_nearest: rounding to the nearest value in array
+    :param add_binary: adding additonal columns with mask missing or not
+    :return: dataset without missing values
+    """
+
+    # some bad things
+    import warnings
+    warnings.filterwarnings("ignore")
+
+    from sklearn.linear_model import LinearRegression
+    lr = LinearRegression()
+    X = data.copy()
+    X_new = data.copy()
+    mask = X != X
+
+    for row in range(X.shape[0]):
+        for col in range(X.shape[1]):
+            if not mask[row, col]:
+                continue
+            row_missing = X[row, ~mask[row, :]].reshape((1, -1))
+            col_missing = X[~mask[:, col], col].reshape((-1, 1))
+
+            X_competent = X.copy()
+            X_competent = X_competent[~mask[:, col], :]
+            X_competent = X_competent[:, ~mask[row, :]]
+
+            if row_missing.shape[0] == 0 or col_missing.shape[0] == 0:
+                X_new[row, col] = 0
+                continue
+
+            weight1, weight2 = 0.5, 0.5
+            b_row, b_col = 0, 0
+
+            common_non_missing = np.logical_and(X_competent == X_competent, row_missing == row_missing)
+            completeness = common_non_missing.sum(axis=1)
+            distance = np.zeros(completeness.shape)
+            for j in range(X_competent.shape[0]):
+                distance[j] = ((X_competent[j, common_non_missing[j, :]] - row_missing[common_non_missing[j, :].reshape((1, -1))] ) ** 2).sum() ** 0.5
+            competents_row = completeness / distance
+            if X_competent.shape[0] > competent_row_num - 1:
+                indexes = np.argsort(competents_row)[::-1][:competent_row_num - 1]
+                X_competent = X_competent[indexes, :]
+                col_missing = col_missing[indexes, :]
+                competents_row = competents_row[indexes]
+
+            common_non_missing = np.logical_and(X_competent == X_competent, col_missing == col_missing)
+            completeness = common_non_missing.sum(axis=0)
+            correlation = np.zeros(X_competent.shape[1])
+            for j in range(X_competent.shape[1]):
+                correlation[j] = np.corrcoef(X_competent[common_non_missing[:, j], j], col_missing[common_non_missing[:, j], 0])[0, 1]
+                if np.isnan(correlation[j]):
+                    correlation[j] = 0
+            competents_col = completeness * np.abs(correlation)
+            if X_competent.shape[1] > competent_col_num - 1:
+                indexes = np.argsort(competents_col)[::-1][:competent_col_num - 1]
+                X_competent = X_competent[:, indexes]
+                row_missing = row_missing[:, indexes]
+                competents_col = competents_col[indexes]
+
+            X_competent[X_competent != X_competent] = 0
+            alpha_range = np.arange(-3, 3, 1)
+
+            if X_competent.shape[1] < 2:
+                weight1 = 0
+                weight2 = 1
+            else:
+                alpha_result = np.zeros(alpha_range.shape[0])
+                for i, alpha in enumerate(alpha_range):
+                    for c in range(X_competent.shape[1]):
+                        bl = np.zeros(X_competent.shape[0])
+                        mask_row = np.ones(X_competent.shape[1], dtype=bool)
+                        mask_row[c] = False
+                        x_train = X_competent[:, mask_row]
+                        y_train = row_missing[:, mask_row].reshape(-1)
+                        x_test = X_competent[:, c].reshape((-1, 1))
+                        for r in range(X_competent.shape[0]):
+                            lr.fit(x_train[r, :].reshape(1, -1).T, y_train)
+                            bl[r] = lr.predict(x_test[r, :].reshape(1, -1))
+                        b = (bl * competents_row ** alpha).sum() / (competents_row ** alpha).sum()
+                        alpha_result[i] += np.abs(row_missing[:, c] - b)
+                alpha_row = alpha_range[np.argmin(alpha_result)]
+
+                bl = np.zeros(X_competent.shape[0])
+                for r in range(X_competent.shape[0]):
+                    lr.fit(X_competent[r, :].reshape((-1, 1)), row_missing.reshape(-1))
+                    bl[r] = lr.predict(col_missing[r, :].reshape((-1, 1)))
+                b_row = (bl * competents_row ** alpha_row).sum() / (competents_row ** alpha_row).sum()
+
+            if X_competent.shape[0] < 2:
+                if weight1 == 0:
+                    X_new[row, col] = 0
+                    continue
+                else:
+                    weight1 = 1
+                    weight2 = 0
+            else:
+                alpha_result = np.zeros(alpha_range.shape[0])
+                for i, alpha in enumerate(alpha_range):
+                    for r in range(X_competent.shape[0]):
+                        bl = np.zeros(X_competent.shape[1])
+                        mask_col = np.ones(X_competent.shape[0], dtype=bool)
+                        mask_col[r] = False
+                        x_train = X_competent[mask_col, :]
+                        y_train = col_missing[mask_col, :]
+                        x_test = X_competent[r, :].reshape((1, -1))
+                        for c in range(X_competent.shape[1]):
+                            lr.fit(x_train[:, c].reshape(1, -1).T, y_train)
+                            bl[c] = lr.predict(x_test[:, c].reshape(1, -1))
+                        b = (bl * competents_col ** alpha).sum() / (competents_col ** alpha).sum()
+                        alpha_result[i] += np.abs(col_missing[r, :] - b)
+                alpha_col = alpha_range[np.argmin(alpha_result)]
+
+                bl = np.zeros(X_competent.shape[1])
+                for c in range(X_competent.shape[1]):
+                    lr.fit(X_competent[:, c].reshape((-1, 1)), col_missing.reshape(-1))
+                    bl[c] = lr.predict(row_missing[:, c].reshape((-1, 1)))
+                b_col = (bl * competents_col ** alpha_col).sum() / (competents_col ** alpha_col).sum()
+
+            X_new[row, col] = weight1 * b_row + weight2 * b_col
+
+    if round_nearest:
+        X_new = _round_nearest(X_new, mask)
+
+    if add_binary:
+        X_new = _add_missing_binary(X_new, mask)
+
+    return X_new
 
 
 # start with simple imputing with mean and find nearest

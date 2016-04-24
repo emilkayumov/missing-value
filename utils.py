@@ -16,8 +16,8 @@ _lr = LogisticRegression(random_state=123)
 _nn = KNeighborsClassifier(n_jobs=-1)
 
 _algs = ['RF', 'LR', 'kNN']
-_methods = ['ignore', 'special', 'common', 'mean', 'svd', 'knn', 'rf', 'lr', 'em', 'k-means']
-_colors = {'ignore': '#CC0000',
+_methods = ['ignore', 'special', 'common', 'mean', 'svd', 'knn', 'rf', 'lr', 'em', 'k-means', 'zet']
+_colors = {'zet': '#CC0000',
            'special': '#888800',
            'common': '#66CC00',
            'mean': '#00CCCC',
@@ -50,6 +50,7 @@ def dataset_exps(data, y, cv, add_binary):
     data_lr = imputers.linear_imputer(data, add_binary=add_binary)
     data_em = imputers.em_imputer(data, add_binary=add_binary)
     data_km = imputers.kmean_imputer(data, add_binary=add_binary)
+    data_zet = imputers.zet_imputer(data, competent_row_num=8, competent_col_num=4, add_binary=add_binary)
 
     result = np.zeros((len(_methods), len(_algs)))
 
@@ -66,6 +67,7 @@ def dataset_exps(data, y, cv, add_binary):
     result[7] = multi_algs_cv(data_lr, y, cv)
     result[8] = multi_algs_cv(data_em, y, cv)
     result[9] = multi_algs_cv(data_km, y, cv)
+    result[10] = multi_algs_cv(data_zet, y, cv)
 
     result = pd.DataFrame(result, columns=_algs, index=_methods)
 
@@ -80,8 +82,12 @@ def make_experiments(data_real, target, clf, cv, missing_frac_range, num_iter, s
     accuracy = pd.DataFrame(np.zeros((len(_methods), len(missing_frac_range))), index=_methods, columns=missing_frac_range)
     rmse = pd.DataFrame(np.zeros((len(_methods), len(missing_frac_range))), index=_methods, columns=missing_frac_range)
 
+    # because it is very slow
+    zet_num_iter = min(3, num_iter)
+
     for missing_frac in missing_frac_range:
         print('start fraction:', missing_frac)
+        zet_current_iter = 0
         for iteration in range(num_iter):
             data_missing = random_deletion.make_missing_value(data_real, del_fraction=missing_frac,
                                                               del_fraction_column=0.5)
@@ -162,6 +168,15 @@ def make_experiments(data_real, target, clf, cv, missing_frac_range, num_iter, s
             cur_rmse = np.sum(np.array((data_real - data_imp) ** 2)) ** 0.5
             accuracy.ix['k-means', missing_frac] += cur_accuracy / num_iter
             rmse.ix['k-means', missing_frac] += cur_rmse / num_iter
+
+            # zet
+            # if zet_current_iter < zet_num_iter:
+            #     data_imp = imputers.zet_imputer(data_missing, competent_row_num=8, competent_col_num=4, add_binary=add_binary)
+            #     cur_accuracy = np.mean(cross_val_score(clf, data_imp, target, scoring='accuracy', cv=cv))
+            #     cur_rmse = np.sum(np.array((data_real - data_imp) ** 2)) ** 0.5
+            #     accuracy.ix['zet', missing_frac] += cur_accuracy / zet_num_iter
+            #     rmse.ix['zet', missing_frac] += cur_rmse / zet_num_iter
+            #     zet_current_iter += 1
 
     return accuracy, rmse
 
