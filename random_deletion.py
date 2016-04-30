@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def make_missing_value(X, del_fraction=0.05, del_fraction_column=1.0, del_fraction_row=1.0):
+def make_missing_value(X, del_fraction=0.05, del_fraction_column=1.0, del_fraction_row=1.0, del_columns=None):
     """
     A function for making random missing value in dataset (MCAR).
     ----------
@@ -20,6 +20,9 @@ def make_missing_value(X, del_fraction=0.05, del_fraction_column=1.0, del_fracti
 
     # choosing columns and rows
     del_columns = np.random.permutation(np.arange(D))[:col_count]
+    
+    if del_columns is None:
+        del_columns = np.arange(D)[D-col_count:]
     del_row = np.random.permutation(np.arange(N))[:row_count]
 
     # calc new delete fraction as fraction of missing value in chosen columns and rows.

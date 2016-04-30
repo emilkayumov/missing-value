@@ -26,7 +26,7 @@ _colors = {'zet': '#CC0000',
            'rf': '#CC00CC',
            'lr': '#333333',
            'em': '#FF8000',
-           'k-means': '#FFFF00'}
+           'k-means': '#CCCC00'}
 _datasets = ['krkp', 'creditg', 'segment']
 
 
@@ -50,7 +50,7 @@ def dataset_exps(data, y, cv, add_binary):
     data_lr = imputers.linear_imputer(data, add_binary=add_binary)
     data_em = imputers.em_imputer(data, add_binary=add_binary)
     data_km = imputers.kmean_imputer(data, add_binary=add_binary)
-    data_zet = imputers.zet_imputer(data, competent_row_num=8, competent_col_num=4, add_binary=add_binary)
+    data_zet = imputers.zet_imputer(data, competent_row_num=6, competent_col_num=4, add_binary=add_binary)
 
     result = np.zeros((len(_methods), len(_algs)))
 
@@ -77,17 +77,14 @@ def dataset_exps(data, y, cv, add_binary):
     return result
 
 
-def make_experiments(data_real, target, clf, cv, missing_frac_range, num_iter, sp_value, add_binary):
+def make_experiments(data_real, target, clf, cv, missing_frac_range, num_iter, sp_value, add_binary, del_columns=None):
 
     accuracy = pd.DataFrame(np.zeros((len(_methods), len(missing_frac_range))), index=_methods, columns=missing_frac_range)
     rmse = pd.DataFrame(np.zeros((len(_methods), len(missing_frac_range))), index=_methods, columns=missing_frac_range)
 
-    # because it is very slow
-    zet_num_iter = min(3, num_iter)
-
     for missing_frac in missing_frac_range:
         print('start fraction:', missing_frac)
-        zet_current_iter = 0
+        
         for iteration in range(num_iter):
             data_missing = random_deletion.make_missing_value(data_real, del_fraction=missing_frac,
                                                               del_fraction_column=0.5)
@@ -170,41 +167,42 @@ def make_experiments(data_real, target, clf, cv, missing_frac_range, num_iter, s
             rmse.ix['k-means', missing_frac] += cur_rmse / num_iter
 
             # zet
-            # if zet_current_iter < zet_num_iter:
-            #     data_imp = imputers.zet_imputer(data_missing, competent_row_num=8, competent_col_num=4, add_binary=add_binary)
-            #     cur_accuracy = np.mean(cross_val_score(clf, data_imp, target, scoring='accuracy', cv=cv))
-            #     cur_rmse = np.sum(np.array((data_real - data_imp) ** 2)) ** 0.5
-            #     accuracy.ix['zet', missing_frac] += cur_accuracy / zet_num_iter
-            #     rmse.ix['zet', missing_frac] += cur_rmse / zet_num_iter
-            #     zet_current_iter += 1
+            data_imp = imputers.zet_imputer(data_missing, competent_row_num=6, competent_col_num=4, add_binary=add_binary)
+            cur_accuracy = np.mean(cross_val_score(clf, data_imp, target, scoring='accuracy', cv=cv))
+            cur_rmse = np.sum(np.array((data_real - data_imp) ** 2)) ** 0.5
+            accuracy.ix['zet', missing_frac] += cur_accuracy / num_iter
+            rmse.ix['zet', missing_frac] += cur_rmse / num_iter
 
     return accuracy, rmse
 
 
 def make_plots_accuracy(accuracy_rf, accuracy_lr, accuracy_knn, dataset_name, filename=''):
-    plt.figure(figsize=(16, 6))
+    plt.figure(figsize=(20, 5))
     plt.suptitle('Accuracy (' + dataset_name + ')', fontsize=18)
 
-    plt.subplot(1, 3, 1)
+    plt.subplot(1, 4, 1)
     for method in accuracy_rf.index:
         plt.plot(accuracy_rf.columns, accuracy_rf.ix[method], label=method, color=_colors[method], lw=1.5)
-    plt.title('Random forest', fontsize=16)
+    plt.title('Random forest', fontsize=14)
     plt.xlabel("Missing value fraction", fontsize=12)
+    plt.xlim([0, 0.15])
     plt.ylabel("Accuracy", fontsize=12)
 
-    plt.subplot(1, 3, 2)
+    plt.subplot(1, 4, 2)
     for method in accuracy_lr.index:
         plt.plot(accuracy_lr.columns, accuracy_lr.ix[method], label=method, color=_colors[method], lw=1.5)
-    plt.title('Logistic regression', fontsize=16)
+    plt.title('Logistic regression', fontsize=14)
     plt.xlabel("Missing value fraction", fontsize=12)
-    plt.ylabel("Accuracy", fontsize=12)
+    plt.xlim([0, 0.15])
+    #plt.ylabel("Accuracy", fontsize=12)
 
-    plt.subplot(1, 3, 3)
+    plt.subplot(1, 4, 3)
     for method in accuracy_knn.index:
         plt.plot(accuracy_knn.columns, accuracy_knn.ix[method], label=method, color=_colors[method], lw=1.5)
-    plt.title('Nearest neighbors', fontsize=16)
+    plt.title('Nearest neighbors', fontsize=14)
     plt.xlabel("Missing value fraction", fontsize=12)
-    plt.ylabel("Accuracy", fontsize=12)
+    plt.xlim([0, 0.15])
+    #plt.ylabel("Accuracy", fontsize=12)
 
     plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=14)
     if filename:
@@ -213,29 +211,32 @@ def make_plots_accuracy(accuracy_rf, accuracy_lr, accuracy_knn, dataset_name, fi
 
 
 def make_plots_rmse(rmse_krkp, rmse_creditg, rmse_segment, filename):
-    plt.figure(figsize=(16, 6))
+    plt.figure(figsize=(20, 5))
     plt.suptitle('RMSE', fontsize=18)
 
-    plt.subplot(1, 3, 1)
+    plt.subplot(1, 4, 1)
     for method in rmse_krkp.index:
         plt.plot(rmse_krkp.columns, rmse_krkp.ix[method], label=method, color=_colors[method], lw=1.5)
-    plt.title(_datasets[0], fontsize=16)
+    plt.title(_datasets[0], fontsize=14)
+    plt.xlim([0, 0.15])
     plt.xlabel("Missing value fraction", fontsize=12)
     plt.ylabel("RMSE", fontsize=12)
 
-    plt.subplot(1, 3, 2)
+    plt.subplot(1, 4, 2)
     for method in rmse_creditg.index:
         plt.plot(rmse_creditg.columns, rmse_creditg.ix[method], label=method, color=_colors[method], lw=1.5)
-    plt.title(_datasets[1], fontsize=16)
+    plt.title(_datasets[1], fontsize=14)
+    plt.xlim([0, 0.15])
     plt.xlabel("Missing value fraction", fontsize=12)
-    plt.ylabel("RMSE", fontsize=12)
+    #plt.ylabel("RMSE", fontsize=12)
 
-    plt.subplot(1, 3, 3)
+    plt.subplot(1, 4, 3)
     for method in rmse_segment.index:
         plt.plot(rmse_segment.columns, rmse_segment.ix[method], label=method, color=_colors[method], lw=1.5)
-    plt.title(_datasets[2], fontsize=16)
+    plt.title(_datasets[2], fontsize=14)
+    plt.xlim([0, 0.15])
     plt.xlabel("Missing value fraction", fontsize=12)
-    plt.ylabel("RMSE", fontsize=12)
+    #plt.ylabel("RMSE", fontsize=12)
 
     plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=14)
     if filename:
